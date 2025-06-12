@@ -1,5 +1,7 @@
 'use client'
 
+import { supabase } from '@/lib/supabase/client'
+
 // Tipos baseados na estrutura da tabela lalunna_clientes
 export interface Cliente {
   id: number
@@ -8,12 +10,15 @@ export interface Cliente {
   whatsapp: string | null
   empresa: string | null
   id_campanha: string | null
-  cidade?: string | null
 }
 
 // Tipos para criar/atualizar um cliente
 export type ClienteInsert = Omit<Cliente, 'id' | 'created_at' | 'id_campanha'>
 export type ClienteUpdate = Partial<ClienteInsert>
+
+// URL base da API do Supabase
+const API_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1`
+const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 // Tipos para erros da API
 type ApiError = {
@@ -25,41 +30,13 @@ type ApiError = {
 // Constantes de configuração
 const REQUEST_TIMEOUT = 10000 // 10 segundos
 
-// Função para obter o token de autenticação atual
-const getAuthToken = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  
-  try {
-    // Verificar primeiro no formato mais recente do Supabase
-    const sbSession = localStorage.getItem('sb-auth-token');
-    
-    if (sbSession) {
-      const parsedSession = JSON.parse(sbSession);
-      return parsedSession?.access_token || null;
-    }
-    
-    // Fallback para o formato antigo
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      const user = JSON.parse(userData);
-      return user.id || null;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Erro ao obter token de autenticação:', error);
-    return null;
-  }
-}
-
 // Headers padrão para as requisições
-const getHeaders = () => {
-  const token = getAuthToken();
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': token ? `Bearer ${token}` : ''
-  };
-}
+const getHeaders = () => ({
+  'apikey': API_KEY || '',
+  'Authorization': `Bearer ${API_KEY}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation'
+})
 
 // Função para fazer requisições com timeout
 const fetchWithTimeout = async (url: string, options: RequestInit, timeout = REQUEST_TIMEOUT) => {
@@ -122,40 +99,33 @@ const handleApiError = async (response: Response, defaultMessage: string): Promi
 
 export async function countClientes(empresa: string): Promise<number> {
   try {
-    console.log('[CLIENTE SERVICE] Contando clientes para empresa:', empresa);
+    console.log('[DEBUG] [CLIENTE SERVICE] Contando clientes para empresa:', empresa);
     
-    // Verificar token para debug
-    const token = getAuthToken();
-    console.log('[CLIENTE SERVICE] Token disponível:', token ? 'Sim' : 'Não');
-    
-    // Obter headers com token de autenticação
-    const headers = getHeaders();
-    console.log('[CLIENTE SERVICE] Headers:', JSON.stringify(headers));
-    
-    // Fazer a requisição com timeout aumentado para debug
-    const response = await fetchWithTimeout(
-      `/api/clientes/count?empresa=${encodeURIComponent(empresa)}`,
-      {
-        method: 'GET',
-        headers: headers
-      },
-      15000 // Aumentar timeout para 15 segundos durante debug
-    );
-    
-    console.log('[CLIENTE SERVICE] Status da resposta:', response.status);
-    
-    if (!response.ok) {
-      console.error('[CLIENTE SERVICE] Resposta não ok:', response.status, response.statusText);
-      await handleApiError(response, 'Erro ao contar clientes');
+    if (!supabase) {
+      console.error('[DEBUG] [CLIENTE SERVICE] Cliente do Supabase não disponível');
+      throw new Error('Cliente do Supabase não está disponível');
     }
     
-    const data = await response.json();
-    console.log('[CLIENTE SERVICE] Dados recebidos:', data);
-    return data.count || 0;
+    console.log('[DEBUG] [CLIENTE SERVICE] Consultando tabela lalunna_clientes para empresa:', empresa);
+    
+    // Consulta direta à tabela lalunna_clientes
+    const { count, error } = await supabase
+      .from('lalunna_clientes')
+      .select('*', { count: 'exact', head: true })
+      .eq('empresa', empresa);
+
+    if (error) {
+      console.error('[DEBUG] [CLIENTE SERVICE] Erro ao contar clientes:', error);
+      console.error('[DEBUG] [CLIENTE SERVICE] Código:', error.code);
+      console.error('[DEBUG] [CLIENTE SERVICE] Mensagem:', error.message);
+      throw new Error(`Erro ao contar clientes: ${error.message}`);
+    }
+
+    console.log('[DEBUG] [CLIENTE SERVICE] Total de clientes encontrados:', count);
+    return count || 0;
   } catch (error) {
-    console.error('[CLIENTE SERVICE] Erro ao contar clientes:', error);
-    // Retornar um valor padrão para evitar quebrar a interface
-    return 0;
+    console.error('[DEBUG] [CLIENTE SERVICE] Erro ao contar clientes:', error);
+    throw error;
   }
 }
 
@@ -168,15 +138,16 @@ export async function getClienteById(id: number): Promise<Cliente | null> {
   
   try {
     const response = await fetchWithTimeout(
-      `/api/clientes?id=${id}`,
+      `${API_URL}/lalunna_clientes?id=eq.${id}`,
       {
         method: 'GET',
-        headers: getHeaders()
+        headers: getHeaders(),
+        next: { revalidate: 0 } // Sempre buscar do servidor
       }
     )
 
     if (!response.ok) {
-      await handleApiError(response, 'Erro ao buscar cliente')
+      return handleApiError(response, 'Erro ao buscar cliente')
     }
 
     const data = await response.json()
@@ -184,7 +155,7 @@ export async function getClienteById(id: number): Promise<Cliente | null> {
     return data[0] as Cliente || null
   } catch (error) {
     console.error('[CLIENTE SERVICE] Erro ao buscar cliente:', error)
-    throw error
+    throw error instanceof Error ? error : new Error('Erro desconhecido ao buscar cliente')
   }
 }
 
@@ -195,17 +166,18 @@ export async function getClientes(empresa: string): Promise<Cliente[]> {
   
   console.log('[CLIENTE SERVICE] Buscando clientes para empresa:', empresa)
   
+  const url = new URL(`${API_URL}/lalunna_clientes`)
+  url.searchParams.append('empresa', `eq.${empresa}`)
+  url.searchParams.append('select', '*')
+
   try {
-    const response = await fetchWithTimeout(
-      `/api/clientes?empresa=${encodeURIComponent(empresa)}`,
-      {
-        method: 'GET',
-        headers: getHeaders()
-      }
-    )
+    const response = await fetchWithTimeout(url.toString(), {
+      method: 'GET',
+      headers: getHeaders()
+    })
 
     if (!response.ok) {
-      await handleApiError(response, 'Erro ao buscar clientes')
+      return await handleApiError(response, 'Erro ao buscar clientes')
     }
 
     const data = await response.json()
@@ -213,22 +185,25 @@ export async function getClientes(empresa: string): Promise<Cliente[]> {
     return data
   } catch (error) {
     console.error('[CLIENTE SERVICE] Erro ao buscar clientes:', error)
-    throw error
+    throw new Error('Erro ao buscar clientes. Tente novamente mais tarde.')
   }
 }
 
 export async function getClientesRecentes(empresa: string, limite: number = 10): Promise<Cliente[]> {
+  const url = new URL(`${API_URL}/lalunna_clientes`)
+  url.searchParams.append('empresa', `eq.${empresa}`)
+  url.searchParams.append('select', '*')
+  url.searchParams.append('order', 'created_at.desc')
+  url.searchParams.append('limit', limite.toString())
+
   try {
-    const response = await fetchWithTimeout(
-      `/api/clientes?empresa=${encodeURIComponent(empresa)}&limite=${limite}`,
-      {
-        method: 'GET',
-        headers: getHeaders()
-      }
-    )
+    const response = await fetchWithTimeout(url.toString(), {
+      method: 'GET',
+      headers: getHeaders()
+    })
 
     if (!response.ok) {
-      await handleApiError(response, 'Erro ao buscar clientes recentes')
+      return await handleApiError(response, 'Erro ao buscar clientes recentes')
     }
 
     const data = await response.json()
@@ -236,7 +211,7 @@ export async function getClientesRecentes(empresa: string, limite: number = 10):
     return data
   } catch (error) {
     console.error('[CLIENTE SERVICE] Erro ao buscar clientes recentes:', error)
-    throw error
+    throw new Error('Erro ao buscar clientes recentes. Tente novamente mais tarde.')
   }
 }
 
@@ -262,7 +237,7 @@ export async function createCliente(cliente: ClienteInsert): Promise<Cliente> {
     console.log('[CLIENTE SERVICE] Dados para inserção:', clienteData)
 
     const response = await fetchWithTimeout(
-      `/api/clientes`,
+      `${API_URL}/lalunna_clientes`,
       {
         method: 'POST',
         headers: getHeaders(),
@@ -271,7 +246,7 @@ export async function createCliente(cliente: ClienteInsert): Promise<Cliente> {
     )
 
     if (!response.ok) {
-      await handleApiError(response, 'Erro ao criar cliente')
+      return handleApiError(response, 'Erro ao criar cliente')
     }
 
     const [data] = await response.json()
@@ -279,7 +254,7 @@ export async function createCliente(cliente: ClienteInsert): Promise<Cliente> {
     return data as Cliente
   } catch (error) {
     console.error('[CLIENTE SERVICE] Erro ao criar cliente:', error)
-    throw error
+    throw error instanceof Error ? error : new Error('Erro desconhecido ao criar cliente')
   }
 }
 
@@ -320,11 +295,11 @@ export async function updateCliente(id: number, updates: ClienteUpdate): Promise
     console.log('[CLIENTE SERVICE] Dados para atualização:', updateData)
 
     const response = await fetchWithTimeout(
-      `/api/clientes`,
+      `${API_URL}/lalunna_clientes?id=eq.${id}`,
       {
         method: 'PATCH',
         headers: getHeaders(),
-        body: JSON.stringify({ id, ...updateData })
+        body: JSON.stringify(updateData)
       }
     )
 
@@ -361,7 +336,7 @@ export async function deleteCliente(id: number): Promise<void> {
     }
     
     const response = await fetchWithTimeout(
-      `/api/clientes?id=${id}`,
+      `${API_URL}/lalunna_clientes?id=eq.${id}`,
       {
         method: 'DELETE',
         headers: getHeaders()

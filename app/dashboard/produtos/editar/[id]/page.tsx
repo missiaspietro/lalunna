@@ -15,10 +15,19 @@ import { getProduto, updateProduto, uploadProdutoImage, deleteProdutoImage } fro
 import { useAuth } from "@/contexts/auth-context"
 import { toast } from "sonner"
 
+type PageParams = {
+  id: string | string[]
+}
+
 export default function EditarProdutoPage() {
   const router = useRouter()
-  const params = useParams()
+  const params = useParams<PageParams>()
   const { user } = useAuth()
+  
+  if (!params || !params.id) {
+    router.push('/dashboard/produtos')
+    return null
+  }
   const [isLoading, setIsLoading] = useState(true)
   const [formData, setFormData] = useState({
     titulo: "",
@@ -39,15 +48,20 @@ export default function EditarProdutoPage() {
   const normalizeTamanho = (tamanho: string | null) => {
     if (!tamanho) return ""
     
+    // Se já estiver no formato de custom, retorna o valor original
+    if (tamanho.startsWith('custom-')) {
+      return tamanho
+    }
+    
     // Verifica se é um número
     const num = parseFloat(tamanho)
     if (isNaN(num)) return tamanho
     
-    // Se for menor que 14, retorna como "menos-14"
-    if (num < 14) return `custom-menos-${tamanho}`
+    // Se for menor que 14, retorna como número puro
+    if (num < 14) return tamanho
     
-    // Se for maior que 22, retorna como "mais-22"
-    if (num > 22) return `custom-mais-${tamanho}`
+    // Se for maior que 22, retorna como número puro
+    if (num > 22) return tamanho
     
     // Se estiver entre 14 e 22, retorna o número como string
     return tamanho
@@ -56,11 +70,12 @@ export default function EditarProdutoPage() {
   // Carrega os dados do produto
   useEffect(() => {
     const loadProduto = async () => {
-      if (!params?.id || !user?.empresa) return
+      if (!params || !params.id || !user?.empresa) return
       
       try {
         setIsLoading(true)
-        const produto = await getProduto(params.id as string)
+        const produtoId = Array.isArray(params.id) ? params.id[0] : params.id
+        const produto = await getProduto(produtoId)
         
         if (produto && produto.empresa === user.empresa) {
           setFormData({
@@ -116,8 +131,8 @@ export default function EditarProdutoPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!user?.empresa) {
-      toast.error("Usuário não autenticado ou sem empresa")
+    if (!params || !params.id || !user?.empresa) {
+      toast.error("Parâmetros inválidos ou usuário não autenticado")
       return
     }
 
@@ -163,8 +178,11 @@ export default function EditarProdutoPage() {
         url_foto: imageUrl,
       }
 
+      // Obtém o ID do produto de forma segura
+      const produtoId = Array.isArray(params.id) ? params.id[0] : params.id
+      
       // Atualiza o produto
-      await updateProduto(params.id as string, produtoData)
+      await updateProduto(produtoId, produtoData)
       
       toast.success("Produto atualizado com sucesso!")
       router.push("/dashboard/produtos")
@@ -270,7 +288,7 @@ export default function EditarProdutoPage() {
                         max="99"
                         step={formData.tipoTamanho === "anel" ? "1" : "0.1"}
                         placeholder={formData.tipoTamanho === "anel" ? "Ex: 16" : "Ex: 5.5"}
-                        value={formData.tamanho}
+                        value={formData.tamanho ? (formData.tamanho.startsWith('custom-') ? formData.tamanho.split('-').pop() || '' : formData.tamanho) : ''}
                         onChange={(e) => {
                           // Remove qualquer caractere não numérico, excunto ponto decimal
                           let value = e.target.value.replace(/[^0-9.]/g, '');
@@ -294,9 +312,22 @@ export default function EditarProdutoPage() {
                             value = parts.join('.');
                           }
                           
+                          // Converte para número para garantir que está no formato correto
+                          const numValue = parseFloat(value);
+                          let finalValue = value;
+                          
+                          // Aplica a lógica de formatação baseada no tipo de tamanho
+                          if (formData.tipoTamanho === "anel") {
+                            if (numValue < 14) {
+                              finalValue = `custom-menos-${value}`;
+                            } else if (numValue > 22) {
+                              finalValue = `custom-mais-${value}`;
+                            }
+                          }
+                          
                           setFormData(prev => ({
                             ...prev,
-                            tamanho: value
+                            tamanho: finalValue
                           }));
                         }}
                         className="w-full"

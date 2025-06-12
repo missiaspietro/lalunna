@@ -4,19 +4,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useSession } from '@/hooks/use-session'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
-import { LogOut, User } from 'lucide-react'
-import LogoutButton from '../auth/logout-button'
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard' },
-  { name: 'Usuários', href: '/users' },
+  { name: 'Dashboard', href: '/dashboard' }
 ]
 
 export function Header() {
   const pathname = usePathname()
-  const { user, userData, loading } = useSession()
+  const { user, loading } = useSession()
 
   if (pathname === '/login') {
     return null
@@ -53,38 +48,8 @@ export function Header() {
               })}
             </nav>
           </div>
-
-          <div className="hidden sm:ml-6 sm:flex sm:items-center">
-            {loading ? (
-              <div className="flex items-center space-x-4">
-                <Skeleton className="h-8 w-8 rounded-full" />
-                <Skeleton className="h-4 w-24" />
-              </div>
-            ) : user ? (
-              <div className="ml-4 flex items-center md:ml-6">
-                <div className="flex items-center">
-                  <div className="h-8 w-8 rounded-full bg-teal-100 dark:bg-teal-900 flex items-center justify-center">
-                    <User className="h-4 w-4 text-teal-600 dark:text-teal-300" />
-                  </div>
-                  <div className="ml-3">
-                    <div className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                      {userData?.nome || user.email?.split('@')[0]}
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                      {userData?.nivel || 'Usuário'}
-                    </div>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <LogoutButton />
-                </div>
-              </div>
-            ) : (
-              <Button asChild variant="outline">
-                <Link href="/login">Entrar</Link>
-              </Button>
-            )}
-          </div>
+          {/* Espaço vazio para manter o alinhamento */}
+          <div className="w-24"></div>
         </div>
       </div>
     </header>

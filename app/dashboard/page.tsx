@@ -1,12 +1,18 @@
 'use client'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowUpRight, Users, Package, CreditCard, TrendingUp, ArrowDownRight, Loader2, ArrowLeft, ArrowRight } from "lucide-react"
+import { ArrowUpRight, Users, Package, CreditCard, TrendingUp, ArrowDownRight, Loader2, ArrowLeft, ArrowRight, MessageSquare, CheckCircle, XCircle, Info } from "lucide-react"
 import { MainLayout } from "@/components/layout/main-layout"
 import { useAuth } from "@/contexts/auth-context"
 import { countClientes, getClientesRecentes, type Cliente } from "@/services/clienteService"
 import { countProdutos, getProdutos } from "@/services/produtoService"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { useBotStatus } from "@/hooks/useBotStatus"
+import { usePlanoDados } from "@/hooks/usePlanoDados"
+import { Button } from "@/components/ui/button"
+import { PlanoDetalhesModal } from "@/components/plano/plano-detalhes-modal"
+import { formatarMoeda } from "@/lib/utils"
 
 export default function DashboardPage() {
   return (
@@ -17,7 +23,11 @@ export default function DashboardPage() {
 }
 
 function DashboardContent() {
+  const router = useRouter()
   const { user } = useAuth()
+  const { botStatus, isLoading: loadingBotStatus } = useBotStatus()
+  const { planoDados, isLoading: loadingPlano, error: planoError } = usePlanoDados()
+  const [isPlanoModalOpen, setIsPlanoModalOpen] = useState(false)
   const [totalClientes, setTotalClientes] = useState<number | null>(null)
   const [totalProdutos, setTotalProdutos] = useState<number | null>(null)
   const [clientesRecentes, setClientesRecentes] = useState<Cliente[]>([])
@@ -205,17 +215,48 @@ function DashboardContent() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="bg-gradient-to-br from-violet-500 to-purple-600 text-white border-0 shadow-lg">
           <CardHeader className="pb-2">
-            <CardDescription className="text-violet-100">Vendas Hoje</CardDescription>
+            <CardDescription className="text-violet-100">Status do WhatsApp</CardDescription>
             <CardTitle className="text-2xl flex justify-between items-center">
-              R$ 1.240,50
-              <TrendingUp className="h-5 w-5 text-violet-200" />
+              {loadingBotStatus ? (
+                <div className="flex items-center">
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  <span>Verificando...</span>
+                </div>
+              ) : botStatus.isConnected ? (
+                <span>Conectado</span>
+              ) : (
+                <span>Desconectado</span>
+              )}
+              <MessageSquare className="h-5 w-5 text-violet-200" />
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center text-sm">
-              <ArrowUpRight className="mr-1 h-4 w-4 text-green-300" />
-              <span className="text-green-300 font-medium">+12%</span>
-              <span className="ml-1 text-violet-200">desde ontem</span>
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center text-sm">
+                {botStatus.isConnected ? (
+                  <>
+                    <CheckCircle className="mr-1 h-4 w-4 text-green-300" />
+                    <span className="text-green-300 font-medium">Bot ativo</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="mr-1 h-4 w-4 text-red-400 dark:text-red-400" />
+                    <span className="text-red-400 dark:text-red-400 font-medium">Bot inativo</span>
+                  </>
+                )}
+                <span className="ml-1 text-violet-200">WhatsApp</span>
+              </div>
+              <div className="flex justify-end">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-violet-100 bg-violet-800/70 hover:bg-violet-700/80 hover:text-white"
+                  onClick={() => router.push('/dashboard/whatsapp')}
+                >
+                  <MessageSquare className="h-4 w-4 mr-1" />
+                  Conectar
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -237,10 +278,23 @@ function DashboardContent() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center text-sm">
-              <ArrowUpRight className="mr-1 h-4 w-4 text-green-300" />
-              <span className="text-green-300 font-medium">Total</span>
-              <span className="ml-1 text-amber-200">de clientes</span>
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center text-sm">
+                <ArrowUpRight className="mr-1 h-4 w-4 text-slate-50 dark:text-slate-200" />
+                <span className="text-slate-50 dark:text-slate-200 font-medium">Total</span>
+                <span className="ml-1 text-amber-200">de clientes</span>
+              </div>
+              <div className="flex justify-end">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-amber-100 bg-amber-800/70 hover:bg-amber-700/80 hover:text-white"
+                  onClick={() => router.push('/dashboard/clientes')}
+                >
+                  <Users className="h-4 w-4 mr-1" />
+                  Ver clientes
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -262,27 +316,89 @@ function DashboardContent() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center text-sm">
-              <ArrowUpRight className="mr-1 h-4 w-4 text-green-300" />
-              <span className="text-green-300 font-medium">Total</span>
-              <span className="ml-1 text-teal-200">de produtos</span>
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center text-sm">
+                <ArrowUpRight className="mr-1 h-4 w-4 text-slate-50 dark:text-slate-200" />
+                <span className="text-slate-50 dark:text-slate-200 font-medium">Total</span>
+                <span className="ml-1 text-teal-100">de produtos</span>
+              </div>
+              <div className="flex justify-end">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-teal-100 bg-teal-800/70 hover:bg-teal-700/80 hover:text-white"
+                  onClick={() => router.push('/dashboard/produtos')}
+                >
+                  <Package className="h-4 w-4 mr-1" />
+                  Ver produtos
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-rose-400 to-pink-600 text-white border-0 shadow-lg">
           <CardHeader className="pb-2">
-            <CardDescription className="text-rose-100">Receita Mensal</CardDescription>
+            <CardDescription className="text-rose-100">Seu Plano</CardDescription>
             <CardTitle className="text-2xl flex justify-between items-center">
-              R$ 24.980,00
+              {loadingPlano ? (
+                <div className="flex items-center">
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  <span>Carregando...</span>
+                </div>
+              ) : planoError ? (
+                <span className="text-sm text-rose-200">Erro ao carregar</span>
+              ) : planoDados?.valor ? (
+                <span>{formatarMoeda(planoDados.valor)}</span>
+              ) : (
+                <span>Valor não informado</span>
+              )}
               <CreditCard className="h-5 w-5 text-rose-200" />
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center text-sm">
-              <ArrowDownRight className="mr-1 h-4 w-4 text-red-300" />
-              <span className="text-red-300 font-medium">-2.5%</span>
-              <span className="ml-1 text-rose-200">desde o mês passado</span>
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center text-sm">
+                {!planoError && planoDados ? (
+                  <>
+                    {planoDados.status?.toLowerCase() === 'ativo' || 
+                     planoDados.status?.toLowerCase() === 'active' || 
+                     planoDados.status?.toLowerCase() === 'ativado' ? (
+                      <>
+                        <CheckCircle className="mr-1 h-4 w-4 text-green-300" />
+                        <span className="text-green-300 font-medium">Ativo</span>
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="mr-1 h-4 w-4 text-red-300" />
+                        <span className="text-red-300 font-medium">Inativo</span>
+                      </>
+                    )}
+                    {planoDados.valor && (
+                      <span className="ml-1 text-rose-200">
+                        {formatarMoeda(planoDados.valor)}
+                      </span>
+                    )}
+                  </>
+                ) : planoError ? (
+                  <span className="text-red-300">{planoError}</span>
+                ) : (
+                  <span className="text-rose-200">Sem informações do plano</span>
+                )}
+              </div>
+              {!planoError && planoDados && (
+                <div className="flex justify-end">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-rose-100 bg-rose-800/70 hover:bg-rose-700/80 hover:text-white"
+                    onClick={() => setIsPlanoModalOpen(true)}
+                  >
+                    <Info className="h-4 w-4 mr-1" />
+                    Detalhes
+                  </Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -468,6 +584,13 @@ function DashboardContent() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal de detalhes do plano */}
+      <PlanoDetalhesModal 
+        isOpen={isPlanoModalOpen} 
+        onClose={() => setIsPlanoModalOpen(false)} 
+        planoDados={planoDados} 
+      />
     </div>
   )
 }

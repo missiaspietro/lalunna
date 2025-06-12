@@ -10,29 +10,34 @@ export type Produto = Omit<Tables<'lalunna_produtos'>, 'destaque'>
 const BUCKET_NAME = 'disparador'
 
 export async function countProdutos(empresa: string): Promise<number> {
-  console.log('[PRODUTO SERVICE] Contando produtos para empresa:', empresa);
+  console.log('[DEBUG] [PRODUTO SERVICE] Contando produtos para empresa:', empresa);
   
   if (!supabase) {
     const errorMsg = 'Supabase client não está disponível';
-    console.error('[PRODUTO SERVICE]', errorMsg);
+    console.error('[DEBUG] [PRODUTO SERVICE]', errorMsg);
     throw new Error(errorMsg);
   }
 
   try {
+    console.log('[DEBUG] [PRODUTO SERVICE] Consultando tabela lalunna_produtos para empresa:', empresa);
+    
+    // Consulta direta à tabela lalunna_produtos
     const { count, error } = await supabase
       .from('lalunna_produtos')
       .select('*', { count: 'exact', head: true })
       .eq('empresa', empresa);
 
     if (error) {
-      console.error('[PRODUTO SERVICE] Erro ao contar produtos:', error);
-      throw new Error('Erro ao contar produtos');
+      console.error('[DEBUG] [PRODUTO SERVICE] Erro ao contar produtos:', error);
+      console.error('[DEBUG] [PRODUTO SERVICE] Código:', error.code);
+      console.error('[DEBUG] [PRODUTO SERVICE] Mensagem:', error.message);
+      throw new Error(`Erro ao contar produtos: ${error.message}`);
     }
 
-    console.log('[PRODUTO SERVICE] Total de produtos encontrados:', count);
+    console.log('[DEBUG] [PRODUTO SERVICE] Total de produtos encontrados:', count);
     return count || 0;
   } catch (error) {
-    console.error('[PRODUTO SERVICE] Erro ao contar produtos:', error);
+    console.error('[DEBUG] [PRODUTO SERVICE] Erro ao contar produtos:', error);
     throw error;
   }
 }

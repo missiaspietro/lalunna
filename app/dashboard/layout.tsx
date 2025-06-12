@@ -4,7 +4,7 @@ import type React from "react"
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Package, Users, Settings, LogOut, Menu, Home, Bell, Search, MessageSquare, Sun, Moon, Laptop, HelpCircle, Calendar, BarChart3, Clock, Zap, FileText, AlertCircle, User } from "lucide-react"
+import { Package, Users, Settings, LogOut, Menu, Home, Bell, Search, MessageSquare, Sun, Moon, Laptop, HelpCircle, Calendar, BarChart3, Clock, Zap, FileText, AlertCircle, User, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { Suspense } from "react"
 import { useAuth } from "@/contexts/auth-context"
+import { useNotifications } from "@/hooks/useNotifications"
+import { useTheme } from "next-themes"
 import AuthGuard from "@/components/AuthGuard"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -32,7 +34,9 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname()
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-  const { signOut, user } = useAuth()
+  const { user, signOut } = useAuth()
+  const { notifications, loading, error, markAsRead, getUnreadCount } = useNotifications()
+  const { theme, setTheme } = useTheme()
 
   // Função para lidar com o logout
   const handleSignOut = async () => {
@@ -196,48 +200,6 @@ export default function DashboardLayout({
               </div>
               
               <div className="flex items-center gap-2 md:gap-3">
-                {/* Botão de ajuda */}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
-                        <HelpCircle className="h-5 w-5 text-slate-600 dark:text-slate-300" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Ajuda</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                
-                {/* Botão de relatórios */}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
-                        <BarChart3 className="h-5 w-5 text-slate-600 dark:text-slate-300" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Relatórios</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                
-                {/* Botão de agenda */}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
-                        <Calendar className="h-5 w-5 text-slate-600 dark:text-slate-300" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Agenda</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                
                 {/* Seletor de tema */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -246,16 +208,25 @@ export default function DashboardLayout({
                       <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100 text-slate-300" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem 
+                      onClick={() => setTheme('light')}
+                      className={`flex items-center ${theme === 'light' ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : ''}`}
+                    >
                       <Sun className="mr-2 h-4 w-4" />
                       <span>Claro</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setTheme('dark')}
+                      className={`flex items-center ${theme === 'dark' ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : ''}`}
+                    >
                       <Moon className="mr-2 h-4 w-4" />
                       <span>Escuro</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setTheme('system')}
+                      className={`flex items-center ${theme === 'system' ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : ''}`}
+                    >
                       <Laptop className="mr-2 h-4 w-4" />
                       <span>Sistema</span>
                     </DropdownMenuItem>
@@ -267,53 +238,62 @@ export default function DashboardLayout({
                   <PopoverTrigger asChild>
                     <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
                       <Bell className="h-5 w-5 text-slate-600 dark:text-slate-300" />
-                      <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
+                      {getUnreadCount() > 0 && (
+                        <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
+                      )}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-80 p-0" align="end">
                     <div className="bg-gradient-to-r from-violet-500 to-purple-500 px-4 py-2 rounded-t-md">
                       <div className="flex items-center justify-between">
                         <h3 className="text-white font-medium">Notificações</h3>
-                        <span className="bg-white text-violet-600 text-xs font-bold px-2 py-0.5 rounded-full">3 novas</span>
+                        {getUnreadCount() > 0 && (
+                          <span className="bg-white text-violet-600 text-xs font-bold px-2 py-0.5 rounded-full">
+                            {getUnreadCount()} {getUnreadCount() === 1 ? 'nova' : 'novas'}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="max-h-80 overflow-y-auto">
-                      <div className="p-3 border-b hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer">
-                        <div className="flex gap-3">
-                          <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                            <Zap className="h-5 w-5 text-emerald-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">Novo cliente cadastrado</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Maria Silva acabou de se cadastrar</p>
-                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Agora mesmo</p>
-                          </div>
+                      {loading ? (
+                        <div className="p-8 flex justify-center items-center">
+                          <Loader2 className="h-6 w-6 text-violet-500 animate-spin" />
                         </div>
-                      </div>
-                      <div className="p-3 border-b hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer">
-                        <div className="flex gap-3">
-                          <div className="h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                            <MessageSquare className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">Nova mensagem recebida</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">João enviou uma mensagem pelo WhatsApp</p>
-                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">5 minutos atrás</p>
-                          </div>
+                      ) : error ? (
+                        <div className="p-4 text-center text-sm text-red-500">
+                          {error}
                         </div>
-                      </div>
-                      <div className="p-3 border-b hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer">
-                        <div className="flex gap-3">
-                          <div className="h-9 w-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                            <AlertCircle className="h-5 w-5 text-amber-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">Alerta de estoque</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Produto "Camiseta Azul" está com estoque baixo</p>
-                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">1 hora atrás</p>
-                          </div>
+                      ) : notifications.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-slate-500">
+                          Nenhuma notificação encontrada.
                         </div>
-                      </div>
+                      ) : (
+                        notifications.map(notification => (
+                          <div 
+                            key={notification.id} 
+                            className={`p-3 border-b hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer ${notification.status_leitura === 'nao' ? 'bg-slate-50 dark:bg-slate-800/30' : ''}`}
+                            onClick={() => markAsRead(notification.id)}
+                          >
+                            <div className="flex gap-3">
+                              <div className="h-9 w-9 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                                <Bell className="h-5 w-5 text-violet-600" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium">{notification.texto}</p>
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                  {new Date(notification.created_at).toLocaleString('pt-BR', { 
+                                    day: '2-digit', 
+                                    month: '2-digit', 
+                                    year: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                     <div className="p-2 text-center border-t">
                       <Button variant="ghost" size="sm" className="text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300 w-full">
